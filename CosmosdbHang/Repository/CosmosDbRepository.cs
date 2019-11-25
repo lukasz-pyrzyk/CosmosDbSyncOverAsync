@@ -1,83 +1,94 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
-using Microsoft.Azure.Cosmos;
-using Microsoft.Azure.Cosmos.Linq;
+using Microsoft.Azure.Documents;
+using Microsoft.Azure.Documents.Client;
+using Microsoft.Azure.Documents.Linq;
 
 namespace CosmosdbHang.Repository
 {
-    class CosmosDbRepository : IDisposable
+    class CosmosDbRepository
     {
-        private readonly AsyncLazy<Container> _containerFactory;
+        private readonly AsyncLazy<DocumentClient> _clientFactory;
         private readonly CosmosDBSettings _settings;
-        private readonly CosmosClient _databaseClient;
+        private Uri _collectionUri;
 
         internal CosmosDbRepository(CosmosDBSettings settings)
         {
             _settings = settings;
-            var options = new CosmosClientOptions
-            {
-                ConnectionMode = _settings.UseDirectConnectionMode ? ConnectionMode.Direct : ConnectionMode.Gateway,
-                ApplicationRegion = _settings.Region
-            };
 
-            _databaseClient = new CosmosClient(_settings.Endpoint, _settings.Key, options);
-            _containerFactory = new AsyncLazy<Container>(async () =>
+            _clientFactory = new AsyncLazy<DocumentClient>(async () =>
             {
-                await CheckIfDatabaseExists(_databaseClient).ConfigureAwait(false);
-                var container = await CheckIfContainerExists(_databaseClient).ConfigureAwait(false);
-                return container;
+                var policy = new ConnectionPolicy
+                {
+                    ConnectionMode = _settings.UseDirectConnectionMode ? ConnectionMode.Direct : ConnectionMode.Gateway,
+                    ConnectionProtocol = Protocol.Tcp,
+                    UseMultipleWriteLocations = true
+                };
+
+                policy.PreferredLocations.Add(settings.Region);
+
+                var client = new DocumentClient(new Uri(_settings.Endpoint), _settings.Key, policy);
+
+                await PrepareDatabase(client).ConfigureAwait(false);
+                _collectionUri = PrepareCollection(client);
+
+                return client;
             });
         }
 
-        private async Task CheckIfDatabaseExists(CosmosClient client)
+        private async Task<string> PrepareDatabase(DocumentClient client)
         {
-            var database = client.GetDatabase(_settings.DatabaseId);
-            var read = await database.ReadStreamAsync().ConfigureAwait(false);
-            if (read.StatusCode == HttpStatusCode.NotFound)
+            try
             {
-                throw new Exception($"CosmosDB database {_settings.DatabaseId} does not exist!");
+                var response = await client.ReadDatabaseAsync(UriFactory.CreateDatabaseUri(_settings.DatabaseId)).ConfigureAwait(false);
+                response.Log(nameof(PrepareDatabase));
+                return _settings.DatabaseId;
+            }
+            catch (DocumentClientException de)
+            {
+                if (de.StatusCode == HttpStatusCode.NotFound)
+                {
+                    Trace.WriteLine($"Database {_settings.DatabaseId} doesn't exist!");
+                }
+
+                throw;
             }
         }
 
-        private async Task<Container> CheckIfContainerExists(CosmosClient client)
+        private Uri PrepareCollection(DocumentClient client)
         {
-            var container = client.GetContainer(_settings.DatabaseId, _settings.ContainerId);
-            var response = await container.ReadContainerStreamAsync().ConfigureAwait(false);
-
-            if (response.StatusCode == HttpStatusCode.NotFound)
+            var collection = client.CreateDocumentCollectionQuery(UriFactory.CreateDatabaseUri(_settings.ContainerId)).Where(c => c.Id == _settings.ContainerId).ToArray().FirstOrDefault();
+            if (collection is null)
             {
-                throw new Exception($"CosmosDB container {_settings.ContainerId} does not exist!");
+                Trace.WriteLine($"Collection {_settings.ContainerId} does not exist!");
+                throw new Exception($"Collection {_settings.ContainerId} does not exist");
             }
 
-            return container;
+            return UriFactory.CreateDocumentCollectionUri(_settings.DatabaseId, _settings.ContainerId);
         }
 
         internal async Task<ClientEntity> GetClient(Guid clientId)
         {
             try
             {
-                var dbClient = await _containerFactory;
-                var partitionKey = new PartitionKey(clientId.ToString());
-                var query = dbClient
-                    .GetItemLinqQueryable<ClientEntity>(requestOptions: new QueryRequestOptions { PartitionKey = partitionKey })
+                var dbClient = await _clientFactory;
+                using (var query = dbClient.CreateDocumentQuery<ClientEntity>(_collectionUri, new FeedOptions { PartitionKey = new PartitionKey(clientId.ToString()) })
                     .Where(x => x.ClientId == clientId)
-                    .ToFeedIterator();
+                    .AsDocumentQuery())
+                {
 
-                var client = await query.ExecuteFirstOrDefault(nameof(GetClient)).ConfigureAwait(false);
-                return client;
+                    var client = await query.ExecuteFirstOrDefault(nameof(GetClient)).ConfigureAwait(false);
+                    return client;
+                }
             }
-            catch (CosmosException ex)
+            catch (DocumentClientException ex)
             {
-                Console.WriteLine(ex);
+                Trace.WriteLine($"Unable to get the client {clientId} from storage. Exception: {ex}");
                 return null;
             }
-        }
-
-        public void Dispose()
-        {
-            _databaseClient?.Dispose();
         }
     }
 }

@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Linq;
 using System.Reflection;
-using Microsoft.Azure.Cosmos;
+using Microsoft.Azure.Documents;
 
 namespace CosmosdbHang.Repository
 {
@@ -38,7 +38,7 @@ namespace CosmosdbHang.Repository
 
         private static string[] GetAllowedRegions()
         {
-            return typeof(Regions)
+            return typeof(LocationNames)
                 .GetFields(BindingFlags.Static | BindingFlags.Public)
                 .Where(x => x.IsLiteral && x.FieldType == typeof(string))
                 .Select(x => (string)x.GetRawConstantValue()).ToArray();
