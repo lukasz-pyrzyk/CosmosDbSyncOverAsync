@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Diagnostics;
-using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 using Microsoft.Azure.Documents;
 using Microsoft.Azure.Documents.Client;
-using Microsoft.Azure.Documents.Linq;
 
 namespace CosmosdbHang.Repository
 {
@@ -13,7 +11,6 @@ namespace CosmosdbHang.Repository
     {
         private readonly AsyncLazy<DocumentClient> _clientFactory;
         private readonly CosmosDBSettings _settings;
-        private Uri _collectionUri;
 
         internal CosmosDbRepository(CosmosDBSettings settings)
         {
@@ -33,7 +30,6 @@ namespace CosmosdbHang.Repository
                 var client = new DocumentClient(new Uri(_settings.Endpoint), _settings.Key, policy);
 
                 await PrepareDatabase(client).ConfigureAwait(false);
-                _collectionUri = PrepareCollection(client);
 
                 return client;
             });
@@ -58,36 +54,18 @@ namespace CosmosdbHang.Repository
             }
         }
 
-        private Uri PrepareCollection(DocumentClient client)
-        {
-            var collection = client.CreateDocumentCollectionQuery(UriFactory.CreateDatabaseUri(_settings.ContainerId)).Where(c => c.Id == _settings.ContainerId).ToArray().FirstOrDefault();
-            if (collection is null)
-            {
-                Trace.WriteLine($"Collection {_settings.ContainerId} does not exist!");
-                throw new Exception($"Collection {_settings.ContainerId} does not exist");
-            }
-
-            return UriFactory.CreateDocumentCollectionUri(_settings.DatabaseId, _settings.ContainerId);
-        }
-
-        internal async Task<ClientEntity> GetClient(Guid clientId)
+        internal async Task<bool> GetDb()
         {
             try
             {
-                var dbClient = await _clientFactory;
-                using (var query = dbClient.CreateDocumentQuery<ClientEntity>(_collectionUri, new FeedOptions { PartitionKey = new PartitionKey(clientId.ToString()) })
-                    .Where(x => x.ClientId == clientId)
-                    .AsDocumentQuery())
-                {
-
-                    var client = await query.ExecuteFirstOrDefault(nameof(GetClient)).ConfigureAwait(false);
-                    return client;
-                }
+                var client = await _clientFactory;
+                await client.ReadDatabaseAsync(UriFactory.CreateDatabaseUri(_settings.DatabaseId)).ConfigureAwait(false);
+                return true;
             }
-            catch (DocumentClientException ex)
+            catch (Exception e)
             {
-                Trace.WriteLine($"Unable to get the client {clientId} from storage. Exception: {ex}");
-                return null;
+                Trace.WriteLine(e);
+                throw;
             }
         }
     }
