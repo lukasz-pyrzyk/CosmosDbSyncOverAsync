@@ -54,7 +54,7 @@ namespace CosmosdbHang.Repository
             }
         }
 
-        internal async Task<bool> GetDb()
+        internal async Task<bool> ReadDatabase()
         {
             try
             {

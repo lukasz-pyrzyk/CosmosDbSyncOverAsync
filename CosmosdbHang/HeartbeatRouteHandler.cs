@@ -21,14 +21,13 @@ namespace CosmosdbHang
 
             public void ProcessRequest(HttpContext context)
             {
-
                 int requestNumber = Interlocked.Increment(ref _requestNumber);
                 Trace.WriteLine($"Request #{requestNumber}, calling a database");
                 var stopwatch = Stopwatch.StartNew();
                 
                 // let's fake any call to the DB
                 var repository = ServiceLocator.Repository;
-                repository.GetDb().ConfigureAwait(false).GetAwaiter().GetResult();
+                repository.ReadDatabase().ConfigureAwait(false).GetAwaiter().GetResult();
                 
                 var msg = $"Request #{requestNumber}, database responded in {stopwatch.ElapsedMilliseconds}ms";
                 Trace.WriteLine(msg);
