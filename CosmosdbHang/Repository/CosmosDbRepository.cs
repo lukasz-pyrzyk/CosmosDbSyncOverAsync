@@ -54,13 +54,12 @@ namespace CosmosdbHang.Repository
             }
         }
 
-        internal async Task<bool> ReadDatabase()
+        internal async Task ReadDatabase()
         {
             try
             {
                 var client = await _clientFactory;
                 await client.ReadDatabaseAsync(UriFactory.CreateDatabaseUri(_settings.DatabaseId)).ConfigureAwait(false);
-                return true;
             }
             catch (Exception e)
             {
