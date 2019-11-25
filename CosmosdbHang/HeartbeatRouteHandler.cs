@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
+using System.Threading;
 using System.Web;
 using System.Web.Routing;
 
@@ -7,6 +8,8 @@ namespace CosmosdbHang
 {
     public class HeartbeatRouteHandler : IRouteHandler
     {
+        private static int _requestNumber;
+
         public IHttpHandler GetHttpHandler(RequestContext requestContext)
         {
             return new HeartbeatRouteHttpHandler();
@@ -14,7 +17,6 @@ namespace CosmosdbHang
 
         private class HeartbeatRouteHttpHandler : IHttpHandler
         {
-
             public bool IsReusable { get; } = true;
 
             public void ProcessRequest(HttpContext context)
@@ -22,13 +24,14 @@ namespace CosmosdbHang
                 var clientId = Guid.NewGuid(); // client doesn't matter
                 var repository = ServiceLocator.Repository;
 
-                Trace.WriteLine("Calling a database");
+                int requestNumber = Interlocked.Increment(ref _requestNumber);
+                Trace.WriteLine($"Request #{requestNumber}, calling a database");
                 var stopwatch = Stopwatch.StartNew();
                 
                 // let's fake any call to the DB
                 repository.GetClient(clientId).ConfigureAwait(false).GetAwaiter().GetResult();
 
-                var msg = $"Database responded in {stopwatch.ElapsedMilliseconds}ms";
+                var msg = $"Request #{requestNumber}, database responded in {stopwatch.ElapsedMilliseconds}ms";
                 Trace.WriteLine(msg);
 
                 context.Response.Output.WriteLine(msg);
