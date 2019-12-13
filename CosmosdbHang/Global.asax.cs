@@ -18,10 +18,11 @@ namespace CosmosdbHang
             var endpoint = Environment.GetEnvironmentVariable("CosmosdbHang-endpoint");
             var key = Environment.GetEnvironmentVariable("CosmosdbHang-key");
             var databaseId = Environment.GetEnvironmentVariable("CosmosdbHang-databaseId");
+            var containerId = Environment.GetEnvironmentVariable("CosmosdbHang-containerId");
             var region = Environment.GetEnvironmentVariable("CosmosdbHang-region");
             var directMode = true;
 
-            var settings = new CosmosDBSettings(endpoint, key, databaseId, region, directMode);
+            var settings = new CosmosDBSettings(endpoint, key, databaseId, containerId, region, directMode);
 
             ServiceLocator.Repository = new CosmosDbRepository(settings);
         }

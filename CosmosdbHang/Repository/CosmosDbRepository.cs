@@ -2,12 +2,13 @@
 using System.Net;
 using System.Threading.Tasks;
 using Microsoft.Azure.Cosmos;
+using Microsoft.Azure.Cosmos.Linq;
 
 namespace CosmosdbHang.Repository
 {
     class CosmosDbRepository : IDisposable
     {
-        private readonly AsyncLazy<Database> clientFactory;
+        private readonly AsyncLazy<Database> _clientFactory;
         private readonly CosmosDBSettings _settings;
         private readonly CosmosClient _databaseClient;
 
@@ -21,7 +22,7 @@ namespace CosmosdbHang.Repository
             };
 
             _databaseClient = new CosmosClient(_settings.Endpoint, _settings.Key, options);
-            clientFactory = new AsyncLazy<Database>(async () =>
+            _clientFactory = new AsyncLazy<Database>(async () =>
             {
                 var database = await CheckIfDatabaseExists(_databaseClient).ConfigureAwait(false);
                 return database;
@@ -44,8 +45,11 @@ namespace CosmosdbHang.Repository
         {
             try
             {
-                var client = await clientFactory;
-                await client.ReadAsync().ConfigureAwait(false);
+                var db = await _clientFactory;
+                var container = db.GetContainer(_settings.ContainerId);
+                var feed = container.GetItemLinqQueryable<Entity>().ToFeedIterator();
+
+                await feed.ReadNextAsync().ConfigureAwait(false);
             }
             catch (Exception e)
             {

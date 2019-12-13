@@ -7,6 +7,7 @@
 - - "CosmosdbHang-endpoint"
 - - "CosmosdbHang-key"
 - - "CosmosdbHang-databaseId"
+- - "CosmosdbHang-containerId"
 - - "CosmosdbHang-region"
 
 ## 3. Repro
